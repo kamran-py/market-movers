@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Compare YTD and MTD price performance across the S&P 500 and Nasdaq-100."
+    />
+    <title>Market Movers</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="simple.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>Market Movers</h1>
+        <span id="universeCount" class="universe-count">Loading market universe</span>
+      </div>
+      <div class="snapshot-status">
+        <span class="status-dot"></span>
+        <span id="snapshotLabel">Loading snapshot</span>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <div class="dashboard-layout">
+        <aside class="sector-sidebar" aria-labelledby="sectorTitle">
+          <div class="sector-sidebar-header">
+            <h2 id="sectorTitle">GICS sector</h2>
+            <button id="clearSector" type="button">Clear</button>
+          </div>
+          <div id="sectorFilters" class="sector-filters"></div>
+        </aside>
+
+        <div class="dashboard-content">
+      <section class="control-panel" aria-labelledby="compareTitle">
+        <div class="control-row">
+          <div class="index-filters" aria-label="Filter stock universe">
+            <button class="filter-button active" data-index="all">Combined</button>
+            <button class="filter-button" data-index="S&P 500">S&amp;P 500</button>
+            <button class="filter-button" data-index="Nasdaq 100">Nasdaq-100</button>
+          </div>
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="m20 20-4-4"></path>
+            </svg>
+            <label class="sr-only" for="stockSearch">Search stocks</label>
+            <input
+              id="stockSearch"
+              type="search"
+              autocomplete="off"
+              placeholder="Add a ticker or company"
+              aria-expanded="false"
+              aria-controls="searchResults"
+            />
+            <div id="searchResults" class="search-results" hidden></div>
+          </div>
+        </div>
+        <div class="selection-row">
+          <span class="selection-label">Comparing</span>
+          <div id="selectedStocks" class="selected-stocks"></div>
+        </div>
+      </section>
+
+      <section class="data-panel chart-panel" aria-labelledby="compareTitle">
+        <header class="panel-header">
+          <div>
+            <h2 id="compareTitle">Performance comparison</h2>
+            <span id="chartKicker" class="panel-subtitle">From Dec 31 close</span>
+          </div>
+          <div class="chart-controls">
+            <div class="chart-period-toggle segmented-control" role="group" aria-label="Chart period">
+              <button class="active" data-period="YTD">YTD</button>
+              <button data-period="MTD">MTD</button>
+            </div>
+            <div class="metric-toggle segmented-control" role="group" aria-label="Chart metric">
+              <button class="active" data-metric="percent">% Change</button>
+              <button data-metric="price">Price</button>
+            </div>
+          </div>
+        </header>
+        <div class="chart-stage">
+          <h3 id="chartTitle" class="sr-only">Year to date</h3>
+          <svg id="chartMain" class="price-chart" role="img" aria-label="Year-to-date price chart"></svg>
+          <div class="chart-tooltip" id="tooltipMain" hidden></div>
+        </div>
+        <div id="legendMain" class="chart-legend"></div>
+        <div id="summaryStrip" class="comparison-table"></div>
+      </section>
+
+      <section class="data-panel movers-section" aria-labelledby="moversTitle">
+        <header class="panel-header">
+          <div>
+            <h2 id="moversTitle">Top movers</h2>
+            <span id="moversSubtitle" class="panel-subtitle">Top 50 gainers and losers in the combined universe</span>
+          </div>
+          <div class="movers-period-toggle segmented-control" role="group" aria-label="Movers period">
+            <button class="active" data-period="YTD">YTD</button>
+            <button data-period="MTD">MTD</button>
+          </div>
+        </header>
+        <div class="movers-grid">
+          <article class="mover-table-panel gainers-panel">
+            <header class="mover-heading">
+              <h3>Gainers</h3>
+              <span id="gainersRange">1–10 of 50</span>
+            </header>
+            <div id="gainersTable" class="mover-table"></div>
+            <nav id="gainersPagination" class="pagination" aria-label="Gainers pages"></nav>
+          </article>
+          <article class="mover-table-panel losers-panel">
+            <header class="mover-heading">
+              <h3>Losers</h3>
+              <span id="losersRange">1–10 of 50</span>
+            </header>
+            <div id="losersTable" class="mover-table"></div>
+            <nav id="losersPagination" class="pagination" aria-label="Losers pages"></nav>
+          </article>
+        </div>
+      </section>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <span>Price-only view · For research use</span>
+      <span id="footerTimestamp"></span>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
