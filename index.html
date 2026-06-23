@@ -27,20 +27,20 @@
       <div class="dashboard-layout">
         <aside class="sector-sidebar" aria-labelledby="sectorTitle">
           <div class="sector-sidebar-header">
-            <h2 id="sectorTitle">GICS sector</h2>
+            <h2 id="sectorTitle">GICS</h2>
             <button id="clearSector" type="button">Clear</button>
           </div>
+          <label class="classification-label" for="subIndustryFilter">GICS Sub-Industry</label>
+          <select id="subIndustryFilter" class="subindustry-filter" disabled>
+            <option>No official sub-industry source loaded</option>
+          </select>
+          <span id="classificationNote" class="classification-note">Loading GICS Sub-Industry source.</span>
           <div id="sectorFilters" class="sector-filters"></div>
         </aside>
 
         <div class="dashboard-content">
       <section class="control-panel" aria-labelledby="compareTitle">
         <div class="control-row">
-          <div class="index-filters" aria-label="Filter stock universe">
-            <button class="filter-button active" data-index="all">Combined</button>
-            <button class="filter-button" data-index="S&P 500">S&amp;P 500</button>
-            <button class="filter-button" data-index="Nasdaq 100">Nasdaq-100</button>
-          </div>
           <div class="search-box">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="11" cy="11" r="7"></circle>
@@ -94,7 +94,6 @@
         <header class="panel-header">
           <div>
             <h2 id="moversTitle">Top movers</h2>
-            <span id="moversSubtitle" class="panel-subtitle">Top 50 gainers and losers in the combined universe</span>
           </div>
           <div class="movers-period-toggle segmented-control" role="group" aria-label="Movers period">
             <button class="active" data-period="YTD">YTD</button>
@@ -131,6 +130,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <script src="data.js"></script>
+    <script src="gics-subindustries.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

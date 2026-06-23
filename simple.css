@@ -115,6 +115,42 @@ body {
   font-size: 10px;
 }
 
+.classification-label {
+  display: block;
+  padding: 10px 12px 5px;
+  color: #4c5561;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.subindustry-filter {
+  width: calc(100% - 24px);
+  min-height: 32px;
+  margin: 0 12px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: white;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.subindustry-filter:disabled {
+  background: #f3f5f7;
+  color: var(--muted);
+}
+
+.classification-note {
+  display: block;
+  padding: 6px 12px 8px;
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 .sector-filters {
   padding: 6px 0;
 }
@@ -336,8 +372,8 @@ body {
 .comparison-head,
 .comparison-row {
   display: grid;
-  grid-template-columns: 90px 100px minmax(150px, 1fr) 105px 105px 105px 105px;
-  min-width: 850px;
+  grid-template-columns: 90px 100px minmax(150px, 1fr) 105px 105px 105px;
+  min-width: 760px;
 }
 
 .comparison-head {
@@ -438,8 +474,8 @@ body {
 .mover-table-head,
 .mover-row {
   display: grid;
-  grid-template-columns: 82px minmax(180px, 1fr) 90px 85px 78px;
-  min-width: 600px;
+  grid-template-columns: 82px minmax(180px, 1fr) 90px 78px;
+  min-width: 515px;
 }
 
 .mover-table-head {
@@ -489,7 +525,6 @@ body {
 }
 
 .mover-last,
-.mover-dollar,
 .mover-percent {
   padding: 0;
   border-radius: 0;

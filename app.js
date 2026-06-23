@@ -38,8 +38,8 @@
 
   const state = {
     selected: initial.filter((ticker) => stockMap.has(ticker)).slice(0, 8),
-    searchIndex: "all",
     sector: "all",
+    subIndustry: "all",
     chartPeriod: "YTD",
     chartMetric: "percent",
     moversPeriod: "YTD",
@@ -60,7 +60,8 @@
     gainersRange: document.querySelector("#gainersRange"),
     losersRange: document.querySelector("#losersRange"),
     sectorFilters: document.querySelector("#sectorFilters"),
-    moversSubtitle: document.querySelector("#moversSubtitle"),
+    subIndustryFilter: document.querySelector("#subIndustryFilter"),
+    classificationNote: document.querySelector("#classificationNote"),
     toast: document.querySelector("#toast"),
   };
 
@@ -140,49 +141,46 @@
       .join("");
   }
 
+  function subIndustryFor(stock) {
+    return (
+      stock.gicsSubIndustry ||
+      stock.subIndustry ||
+      stock.subsector ||
+      window.GICS_SUB_INDUSTRIES?.[stock.ticker] ||
+      ""
+    );
+  }
+
   function activeUniverse() {
     return data.stocks.filter(
       (stock) =>
-        (state.searchIndex === "all" || stock.indexes.includes(state.searchIndex)) &&
-        (state.sector === "all" || stock.sector === state.sector),
+        (state.sector === "all" || stock.sector === state.sector) &&
+        (state.subIndustry === "all" || subIndustryFor(stock) === state.subIndustry),
     );
   }
 
   function updateUniverseLabels() {
     const filtered = activeUniverse();
     const scope = [
-      state.searchIndex === "all"
-        ? "combined indexes"
-        : state.searchIndex === "Nasdaq 100"
-          ? "Nasdaq-100"
-          : state.searchIndex,
       state.sector === "all" ? null : state.sector,
+      state.subIndustry === "all" ? null : state.subIndustry,
     ]
       .filter(Boolean)
       .join(" · ");
     document.querySelector("#universeCount").textContent =
-      `${filtered.length} shown of ${data.stocks.length} listings · ${scope}`;
-    els.moversSubtitle.textContent =
-      `Up to 50 gainers and losers · ${scope}`;
+      `${filtered.length} shown of ${data.stocks.length} listings${scope ? ` · ${scope}` : ""}`;
   }
 
   function renderSectorFilters() {
     const counts = new Map(
       sectorOrder.map((sector) => [
         sector,
-        data.stocks.filter(
-          (stock) =>
-            stock.sector === sector &&
-            (state.searchIndex === "all" || stock.indexes.includes(state.searchIndex)),
-        ).length,
+        data.stocks.filter((stock) => stock.sector === sector).length,
       ]),
     );
     els.sectorFilters.innerHTML = [
       `<button class="sector-filter ${state.sector === "all" ? "active" : ""}" data-sector="all">
-        <span>All sectors</span><span class="sector-filter-count">${data.stocks.filter(
-          (stock) =>
-            state.searchIndex === "all" || stock.indexes.includes(state.searchIndex),
-        ).length}</span>
+        <span>All sectors</span><span class="sector-filter-count">${data.stocks.length}</span>
       </button>`,
       ...sectorOrder.map(
         (sector) => `
@@ -193,9 +191,48 @@
     ].join("");
   }
 
+  function renderSubIndustryFilter() {
+    if (!els.subIndustryFilter) return;
+    const candidates = data.stocks.filter(
+      (stock) => state.sector === "all" || stock.sector === state.sector,
+    );
+    const subIndustries = [...new Set(candidates.map(subIndustryFor).filter(Boolean))].sort(
+      (a, b) => a.localeCompare(b),
+    );
+    if (!subIndustries.length) {
+      state.subIndustry = "all";
+      els.subIndustryFilter.disabled = true;
+      els.subIndustryFilter.innerHTML =
+        '<option value="all">No official sub-industry source loaded</option>';
+      if (els.classificationNote) {
+        els.classificationNote.textContent =
+          "Sector filter is active. Sub-Industry needs a company-level GICS source.";
+      }
+      return;
+    }
+    if (state.subIndustry !== "all" && !subIndustries.includes(state.subIndustry)) {
+      state.subIndustry = "all";
+    }
+    els.subIndustryFilter.disabled = false;
+    els.subIndustryFilter.innerHTML = [
+      `<option value="all">All sub-industries</option>`,
+      ...subIndustries.map(
+        (subIndustry) =>
+          `<option value="${escapeHtml(subIndustry)}" ${state.subIndustry === subIndustry ? "selected" : ""}>${escapeHtml(subIndustry)}</option>`,
+      ),
+    ].join("");
+    if (els.classificationNote) {
+      const meta = window.GICS_SUB_INDUSTRIES_META;
+      els.classificationNote.textContent = meta
+        ? `${meta.matchedTickers} of ${meta.universeTickers} tickers mapped from Capital IQ primary industry.`
+        : "Sub-Industry source loaded.";
+    }
+  }
+
   function setUniverseCounts() {
     setPriceStatus("snapshot");
     renderSectorFilters();
+    renderSubIndustryFilter();
     updateUniverseLabels();
   }
 
@@ -340,7 +377,7 @@
     els.summary.innerHTML = `
       <div class="comparison-head">
         <span>Ticker</span><span>Index</span><span>Name</span><span>Last</span>
-        <span>YTD Chg</span><span>YTD Chg %</span><span>MTD Chg %</span>
+        <span>YTD Chg %</span><span>MTD Chg %</span>
       </div>
       ${state.selected
         .map((ticker, index) => {
@@ -355,7 +392,6 @@
               <span class="membership">${membershipHtml(stock)}</span>
               <span class="comparison-name">${escapeHtml(stock.name)}</span>
               <span>${formatPrice(ytd.current)}</span>
-              <span class="${ytd.dollar >= 0 ? "positive" : "negative"}">${formatSignedPrice(ytd.dollar)}</span>
               <span class="${ytd.percent >= 0 ? "positive" : "negative"}">${formatPercent(ytd.percent)}</span>
               <span class="${mtd.percent >= 0 ? "positive" : "negative"}">${formatPercent(mtd.percent)}</span>
             </div>`;
@@ -628,7 +664,7 @@
   function renderMoverTable(container, rows, rankOffset) {
     container.innerHTML = `
       <div class="mover-table-head">
-        <span>Ticker</span><span>Name / Index</span><span>Last</span><span>Chg</span><span>Chg %</span>
+        <span>Ticker</span><span>Name / Index</span><span>Last</span><span>Chg %</span>
       </div>
       ${rows
         .map(
@@ -640,7 +676,6 @@
             </span>
             <span class="mover-name">${escapeHtml(item.stock.name)} · ${item.stock.indexes.length === 2 ? "Both" : item.stock.indexes[0]}</span>
             <span class="mover-last">${formatPrice(item.current)}</span>
-            <span class="mover-dollar ${item.dollar >= 0 ? "positive" : "negative"}">${formatSignedPrice(item.dollar)}</span>
             <span class="mover-percent ${item.percent >= 0 ? "positive" : "negative"}">${formatPercent(item.percent)}</span>
           </button>`,
         )
@@ -717,8 +752,10 @@
     }
     if (sectorTarget) {
       state.sector = sectorTarget.dataset.sector;
+      state.subIndustry = "all";
       state.moverPages = { gainers: 1, losers: 1 };
       renderSectorFilters();
+      renderSubIndustryFilter();
       updateUniverseLabels();
       renderMovers();
       if (!els.results.hidden) renderSearch();
@@ -745,34 +782,20 @@
     }
   });
 
-  document.querySelectorAll(".filter-button").forEach((button) => {
-    button.addEventListener("click", () => {
-      document.querySelectorAll(".filter-button").forEach((item) => item.classList.remove("active"));
-      button.classList.add("active");
-      state.searchIndex = button.dataset.index;
-      if (
-        state.sector !== "all" &&
-        !data.stocks.some(
-          (stock) =>
-            stock.sector === state.sector &&
-            (state.searchIndex === "all" || stock.indexes.includes(state.searchIndex)),
-        )
-      ) {
-        state.sector = "all";
-      }
-      state.moverPages = { gainers: 1, losers: 1 };
-      renderSectorFilters();
-      updateUniverseLabels();
-      renderMovers();
-      els.search.focus();
-      renderSearch();
-    });
-  });
-
   document.querySelector("#clearSector").addEventListener("click", () => {
     state.sector = "all";
+    state.subIndustry = "all";
     state.moverPages = { gainers: 1, losers: 1 };
     renderSectorFilters();
+    renderSubIndustryFilter();
+    updateUniverseLabels();
+    renderMovers();
+    if (!els.results.hidden) renderSearch();
+  });
+
+  els.subIndustryFilter?.addEventListener("change", () => {
+    state.subIndustry = els.subIndustryFilter.value;
+    state.moverPages = { gainers: 1, losers: 1 };
     updateUniverseLabels();
     renderMovers();
     if (!els.results.hidden) renderSearch();

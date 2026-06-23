@@ -5,3 +5,5 @@
 .dev.vars.*
 __pycache__/
 *.pyc
+pydeps/
+tmp_gics*.xls
