@@ -60,7 +60,6 @@
     gainersRange: document.querySelector("#gainersRange"),
     losersRange: document.querySelector("#losersRange"),
     sectorFilters: document.querySelector("#sectorFilters"),
-    subIndustryFilter: document.querySelector("#subIndustryFilter"),
     classificationNote: document.querySelector("#classificationNote"),
     toast: document.querySelector("#toast"),
   };
@@ -178,53 +177,61 @@
         data.stocks.filter((stock) => stock.sector === sector).length,
       ]),
     );
+    const subIndustryCounts = new Map();
+    data.stocks.forEach((stock) => {
+      const subIndustry = subIndustryFor(stock);
+      if (!subIndustry) return;
+      const key = `${stock.sector}||${subIndustry}`;
+      subIndustryCounts.set(key, (subIndustryCounts.get(key) || 0) + 1);
+    });
+    const subIndustriesBySector = new Map(
+      sectorOrder.map((sector) => [
+        sector,
+        [...subIndustryCounts.keys()]
+          .filter((key) => key.startsWith(`${sector}||`))
+          .map((key) => key.split("||")[1])
+          .sort((a, b) => a.localeCompare(b)),
+      ]),
+    );
     els.sectorFilters.innerHTML = [
       `<button class="sector-filter ${state.sector === "all" ? "active" : ""}" data-sector="all">
         <span>All sectors</span><span class="sector-filter-count">${data.stocks.length}</span>
       </button>`,
       ...sectorOrder.map(
-        (sector) => `
-          <button class="sector-filter ${state.sector === sector ? "active" : ""}" data-sector="${sector}">
-            <span>${sector}</span><span class="sector-filter-count">${counts.get(sector)}</span>
-          </button>`,
+        (sector) => {
+          const isActiveSector = state.sector === sector;
+          const subIndustries = subIndustriesBySector.get(sector) || [];
+          return `
+            <div class="sector-group ${isActiveSector ? "expanded" : ""}">
+              <button class="sector-filter ${isActiveSector && state.subIndustry === "all" ? "active" : ""}" data-sector="${escapeHtml(sector)}">
+                <span>${sector}</span><span class="sector-filter-count">${counts.get(sector)}</span>
+              </button>
+              ${
+                isActiveSector && subIndustries.length
+                  ? `<div class="subindustry-list">
+                      ${subIndustries
+                        .map(
+                          (subIndustry) => `
+                            <button class="subindustry-filter ${state.subIndustry === subIndustry ? "active" : ""}" data-sector-name="${escapeHtml(sector)}" data-sub-industry="${escapeHtml(subIndustry)}">
+                              <span>${escapeHtml(subIndustry)}</span>
+                              <span class="sector-filter-count">${subIndustryCounts.get(`${sector}||${subIndustry}`)}</span>
+                            </button>`,
+                        )
+                        .join("")}
+                    </div>`
+                  : ""
+              }
+            </div>`;
+        },
       ),
     ].join("");
   }
 
   function renderSubIndustryFilter() {
-    if (!els.subIndustryFilter) return;
-    const candidates = data.stocks.filter(
-      (stock) => state.sector === "all" || stock.sector === state.sector,
-    );
-    const subIndustries = [...new Set(candidates.map(subIndustryFor).filter(Boolean))].sort(
-      (a, b) => a.localeCompare(b),
-    );
-    if (!subIndustries.length) {
-      state.subIndustry = "all";
-      els.subIndustryFilter.disabled = true;
-      els.subIndustryFilter.innerHTML =
-        '<option value="all">No official sub-industry source loaded</option>';
-      if (els.classificationNote) {
-        els.classificationNote.textContent =
-          "Sector filter is active. Sub-Industry needs a company-level GICS source.";
-      }
-      return;
-    }
-    if (state.subIndustry !== "all" && !subIndustries.includes(state.subIndustry)) {
-      state.subIndustry = "all";
-    }
-    els.subIndustryFilter.disabled = false;
-    els.subIndustryFilter.innerHTML = [
-      `<option value="all">All sub-industries</option>`,
-      ...subIndustries.map(
-        (subIndustry) =>
-          `<option value="${escapeHtml(subIndustry)}" ${state.subIndustry === subIndustry ? "selected" : ""}>${escapeHtml(subIndustry)}</option>`,
-      ),
-    ].join("");
     if (els.classificationNote) {
       const meta = window.GICS_SUB_INDUSTRIES_META;
       els.classificationNote.textContent = meta
-        ? `${meta.matchedTickers} of ${meta.universeTickers} tickers mapped from Capital IQ primary industry.`
+        ? `${meta.matchedTickers} of ${meta.universeTickers} tickers mapped. Sub-industries are grouped under their sector.`
         : "Sub-Industry source loaded.";
     }
   }
@@ -719,6 +726,201 @@
       <button class="page-arrow" data-page-type="${type}" data-page="${current + 1}" ${current === pageCount ? "disabled" : ""} aria-label="Next ${type} page">→</button>`;
   }
 
+  function comparisonExportRows() {
+    return state.selected
+      .map((ticker) => stockMap.get(ticker))
+      .filter(Boolean)
+      .map((stock) => {
+        const ytd = performance(stock, "YTD");
+        const mtd = performance(stock, "MTD");
+        return {
+          Ticker: stock.ticker,
+          Name: stock.name,
+          Index: stock.indexes.length === 2 ? "Both" : stock.indexes[0],
+          Sector: stock.sector,
+          "GICS Sub-Industry": subIndustryFor(stock),
+          "Last Price": ytd.current,
+          "YTD Change %": ytd.percent / 100,
+          "MTD Change %": mtd.percent / 100,
+        };
+      });
+  }
+
+  function moverExportRows(type) {
+    const ranked = activeUniverse()
+      .map((stock) => ({ stock, ...performance(stock, state.moversPeriod) }))
+      .filter((item) => Number.isFinite(item.percent))
+      .sort((a, b) => b.percent - a.percent);
+    const rows =
+      type === "gainers"
+        ? ranked.filter((item) => item.percent >= 0).slice(0, 50)
+        : ranked
+            .filter((item) => item.percent < 0)
+            .slice(-50)
+            .reverse();
+    return rows.map((item, index) => ({
+      Rank: index + 1,
+      Ticker: item.stock.ticker,
+      Name: item.stock.name,
+      Index: item.stock.indexes.length === 2 ? "Both" : item.stock.indexes[0],
+      Sector: item.stock.sector,
+      "GICS Sub-Industry": subIndustryFor(item.stock),
+      "Last Price": item.current,
+      [`${state.moversPeriod} Change %`]: item.percent / 100,
+    }));
+  }
+
+  function exportRows(kind) {
+    return kind === "comparison" ? comparisonExportRows() : moverExportRows(kind);
+  }
+
+  const csvCell = (value) => {
+    if (value == null) return "";
+    const text = String(value);
+    return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  };
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportCsv(rows, filename) {
+    if (!rows.length) return showToast("Nothing to export");
+    const headers = Object.keys(rows[0]);
+    const csv = [
+      headers.map(csvCell).join(","),
+      ...rows.map((row) =>
+        headers
+          .map((header) => csvCell(typeof row[header] === "number" ? row[header].toString() : row[header]))
+          .join(","),
+      ),
+    ].join("\n");
+    downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename);
+  }
+
+  const xmlCell = (value) =>
+    String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+
+  function columnName(index) {
+    let name = "";
+    let value = index + 1;
+    while (value > 0) {
+      const remainder = (value - 1) % 26;
+      name = String.fromCharCode(65 + remainder) + name;
+      value = Math.floor((value - remainder) / 26);
+    }
+    return name;
+  }
+
+  function crc32(bytes) {
+    let crc = -1;
+    for (const byte of bytes) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit += 1) {
+        crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+      }
+    }
+    return (crc ^ -1) >>> 0;
+  }
+
+  const u16 = (value) => [value & 255, (value >>> 8) & 255];
+  const u32 = (value) => [value & 255, (value >>> 8) & 255, (value >>> 16) & 255, (value >>> 24) & 255];
+
+  function zipFiles(files) {
+    const encoder = new TextEncoder();
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+    files.forEach((file) => {
+      const nameBytes = encoder.encode(file.name);
+      const contentBytes = encoder.encode(file.content);
+      const crc = crc32(contentBytes);
+      const localHeader = new Uint8Array([
+        ...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+        ...u32(crc), ...u32(contentBytes.length), ...u32(contentBytes.length),
+        ...u16(nameBytes.length), ...u16(0),
+      ]);
+      localParts.push(localHeader, nameBytes, contentBytes);
+      centralParts.push(
+        new Uint8Array([
+          ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+          ...u32(crc), ...u32(contentBytes.length), ...u32(contentBytes.length),
+          ...u16(nameBytes.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset),
+        ]),
+        nameBytes,
+      );
+      offset += localHeader.length + nameBytes.length + contentBytes.length;
+    });
+    const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+    const end = new Uint8Array([
+      ...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length),
+      ...u32(centralSize), ...u32(offset), ...u16(0),
+    ]);
+    return new Blob([...localParts, ...centralParts, end], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+  }
+
+  function exportXlsx(rows, filename) {
+    if (!rows.length) return showToast("Nothing to export");
+    const headers = Object.keys(rows[0]);
+    const sheetRows = [headers, ...rows.map((row) => headers.map((header) => row[header]))]
+      .map(
+        (cells, rowIndex) =>
+          `<row r="${rowIndex + 1}">${cells
+            .map((value, colIndex) => {
+              const ref = `${columnName(colIndex)}${rowIndex + 1}`;
+              return typeof value === "number"
+                ? `<c r="${ref}"><v>${value}</v></c>`
+                : `<c r="${ref}" t="inlineStr"><is><t>${xmlCell(value)}</t></is></c>`;
+            })
+            .join("")}</row>`,
+      )
+      .join("");
+    const files = [
+      {
+        name: "[Content_Types].xml",
+        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+      },
+      {
+        name: "_rels/.rels",
+        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+      },
+      {
+        name: "xl/workbook.xml",
+        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Export" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      },
+      {
+        name: "xl/_rels/workbook.xml.rels",
+        content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+      },
+      {
+        name: "xl/worksheets/sheet1.xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`,
+      },
+    ];
+    downloadBlob(zipFiles(files), filename);
+  }
+
+  function handleExport(kind, format) {
+    const rows = exportRows(kind);
+    const suffix = kind === "comparison" ? state.chartPeriod.toLowerCase() : state.moversPeriod.toLowerCase();
+    const filename = `market-movers-${kind}-${suffix}.${format}`;
+    if (format === "csv") exportCsv(rows, filename);
+    else exportXlsx(rows, filename);
+  }
+
   function renderComparison() {
     renderSelected();
     renderSummary();
@@ -764,12 +966,26 @@
     const addTarget = event.target.closest("[data-add]");
     const removeTarget = event.target.closest("[data-remove]");
     const pageTarget = event.target.closest("[data-page-type]");
+    const subIndustryTarget = event.target.closest("[data-sub-industry]");
     const sectorTarget = event.target.closest("[data-sector]");
+    const exportTarget = event.target.closest("[data-export]");
+    if (exportTarget) {
+      handleExport(exportTarget.dataset.export, exportTarget.dataset.format);
+    }
     if (pageTarget && !pageTarget.disabled) {
       state.moverPages[pageTarget.dataset.pageType] = Number(pageTarget.dataset.page);
       renderMovers();
     }
-    if (sectorTarget) {
+    if (subIndustryTarget) {
+      state.sector = subIndustryTarget.dataset.sectorName;
+      state.subIndustry = subIndustryTarget.dataset.subIndustry;
+      state.moverPages = { gainers: 1, losers: 1 };
+      renderSectorFilters();
+      renderSubIndustryFilter();
+      updateUniverseLabels();
+      renderMovers();
+      if (!els.results.hidden) renderSearch();
+    } else if (sectorTarget) {
       state.sector = sectorTarget.dataset.sector;
       state.subIndustry = "all";
       state.moverPages = { gainers: 1, losers: 1 };
@@ -807,14 +1023,6 @@
     state.moverPages = { gainers: 1, losers: 1 };
     renderSectorFilters();
     renderSubIndustryFilter();
-    updateUniverseLabels();
-    renderMovers();
-    if (!els.results.hidden) renderSearch();
-  });
-
-  els.subIndustryFilter?.addEventListener("change", () => {
-    state.subIndustry = els.subIndustryFilter.value;
-    state.moverPages = { gainers: 1, losers: 1 };
     updateUniverseLabels();
     renderMovers();
     if (!els.results.hidden) renderSearch();

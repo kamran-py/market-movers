@@ -30,10 +30,6 @@
             <h2 id="sectorTitle">GICS</h2>
             <button id="clearSector" type="button">Clear</button>
           </div>
-          <label class="classification-label" for="subIndustryFilter">GICS Sub-Industry</label>
-          <select id="subIndustryFilter" class="subindustry-filter" disabled>
-            <option>No official sub-industry source loaded</option>
-          </select>
           <span id="classificationNote" class="classification-note">Loading GICS Sub-Industry source.</span>
           <div id="sectorFilters" class="sector-filters"></div>
         </aside>
@@ -79,6 +75,13 @@
               <button class="active" data-metric="percent">% Change</button>
               <button data-metric="price">Price</button>
             </div>
+            <div class="export-menu">
+              <button type="button" class="export-trigger">Export</button>
+              <div class="export-options">
+                <button type="button" data-export="comparison" data-format="csv">CSV</button>
+                <button type="button" data-export="comparison" data-format="xlsx">XLSX</button>
+              </div>
+            </div>
           </div>
         </header>
         <div class="chart-stage">
@@ -104,7 +107,16 @@
           <article class="mover-table-panel gainers-panel">
             <header class="mover-heading">
               <h3>Gainers</h3>
-              <span id="gainersRange">1–10 of 50</span>
+              <div class="mover-heading-actions">
+                <span id="gainersRange">1–10 of 50</span>
+                <div class="export-menu">
+                  <button type="button" class="export-trigger">Export</button>
+                  <div class="export-options">
+                    <button type="button" data-export="gainers" data-format="csv">CSV</button>
+                    <button type="button" data-export="gainers" data-format="xlsx">XLSX</button>
+                  </div>
+                </div>
+              </div>
             </header>
             <div id="gainersTable" class="mover-table"></div>
             <nav id="gainersPagination" class="pagination" aria-label="Gainers pages"></nav>
@@ -112,7 +124,16 @@
           <article class="mover-table-panel losers-panel">
             <header class="mover-heading">
               <h3>Losers</h3>
-              <span id="losersRange">1–10 of 50</span>
+              <div class="mover-heading-actions">
+                <span id="losersRange">1–10 of 50</span>
+                <div class="export-menu">
+                  <button type="button" class="export-trigger">Export</button>
+                  <div class="export-options">
+                    <button type="button" data-export="losers" data-format="csv">CSV</button>
+                    <button type="button" data-export="losers" data-format="xlsx">XLSX</button>
+                  </div>
+                </div>
+              </div>
             </header>
             <div id="losersTable" class="mover-table"></div>
             <nav id="losersPagination" class="pagination" aria-label="Losers pages"></nav>
