@@ -435,6 +435,19 @@
     return { min: scaleMin, max: scaleMax, step, ticks };
   }
 
+  function monthStartTicks(minTime, maxTime) {
+    const minDate = new Date(minTime);
+    const first = new Date(minDate.getFullYear(), minDate.getMonth(), 1, 12);
+    if (first.getTime() < minTime) first.setMonth(first.getMonth() + 1);
+
+    const ticks = [];
+    for (const tick = new Date(first); tick.getTime() <= maxTime; tick.setMonth(tick.getMonth() + 1)) {
+      ticks.push(tick.getTime());
+    }
+
+    return ticks.length ? ticks : [minTime, maxTime].filter((time, index, list) => index === 0 || time !== list[0]);
+  }
+
   function renderChart() {
     const period = state.chartPeriod;
     const svg = document.querySelector("#chartMain");
@@ -464,7 +477,7 @@
 
     const width = 1200;
     const height = 360;
-    const margin = { top: 18, right: 18, bottom: 32, left: 58 };
+    const margin = { top: 18, right: 86, bottom: 32, left: 58 };
     const plotWidth = width - margin.left - margin.right;
     const plotHeight = height - margin.top - margin.bottom;
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -522,14 +535,13 @@
       svg.append(line, label);
     }
 
-    const dateTicks = 4;
-    for (let index = 0; index < dateTicks; index += 1) {
-      const time = minTime + ((maxTime - minTime) * index) / (dateTicks - 1);
+    const dateTicks = monthStartTicks(minTime, maxTime);
+    dateTicks.forEach((time) => {
       const xPos = x(time);
       const label = svgNode("text", {
         x: xPos,
         y: height - 8,
-        "text-anchor": index === 0 ? "start" : index === dateTicks - 1 ? "end" : "middle",
+        "text-anchor": "middle",
         class: "axis-label",
       });
       label.textContent = new Intl.DateTimeFormat("en-US", {
@@ -537,7 +549,7 @@
         day: "numeric",
       }).format(new Date(time));
       svg.append(label);
-    }
+    });
 
     series.forEach((points, index) => {
       const pathData = points
@@ -556,7 +568,14 @@
         class: "series-end",
         style: `--series-color:${colors[index]}`,
       });
-      svg.append(path, dot);
+      const endLabel = svgNode("text", {
+        x: x(end.time) + 9,
+        y: y(end.value) + 4,
+        class: "series-end-label",
+        style: `--series-color:${colors[index]}`,
+      });
+      endLabel.textContent = selectedStocks[index].ticker;
+      svg.append(path, dot, endLabel);
     });
 
     const hoverLine = svgNode("line", {
