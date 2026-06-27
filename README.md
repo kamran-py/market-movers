@@ -1,7 +1,9 @@
-# Market Lens
+# Market Movers
 
 A lightweight, dependency-free dashboard for comparing S&P 500 and Nasdaq-100
 stock prices.
+
+Live site: https://market-movers.pages.dev/
 
 ## Run with delayed Alpaca prices
 
@@ -10,7 +12,7 @@ stock prices.
 3. Start the included server:
 
 ```powershell
-C:\Users\kanop\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe server.py
+python server.py
 ```
 
 Then open `http://localhost:4173`.
@@ -42,12 +44,18 @@ project's **Settings → Variables and Secrets**:
 Redeploy after adding the secrets. The public website will then use Alpaca's
 15-minute-delayed SIP snapshots and retain the saved snapshot as a fallback.
 
+Production URL:
+
+```text
+https://market-movers.pages.dev/
+```
+
 ## Refresh the snapshot
 
 Run:
 
 ```powershell
-C:\Users\kanop\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe tools/generate_market_data.py
+python tools/generate_market_data.py
 ```
 
 The generator refreshes current index membership and writes a compact price
