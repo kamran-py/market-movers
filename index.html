@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Compare YTD and MTD price performance across the S&P 500 and Nasdaq-100."
+      content="Compare daily, YTD, and MTD price performance across the S&P 500 and Nasdaq-100."
     />
     <title>Market Movers</title>
     <link rel="stylesheet" href="styles.css" />
@@ -70,6 +70,7 @@
             <div class="chart-period-toggle segmented-control" role="group" aria-label="Chart period">
               <button class="active" data-period="YTD">YTD</button>
               <button data-period="MTD">MTD</button>
+              <button data-period="1D">Daily</button>
             </div>
             <div class="metric-toggle segmented-control" role="group" aria-label="Chart metric">
               <button class="active" data-metric="percent">% Change</button>
@@ -101,6 +102,7 @@
           <div class="movers-period-toggle segmented-control" role="group" aria-label="Movers period">
             <button class="active" data-period="YTD">YTD</button>
             <button data-period="MTD">MTD</button>
+            <button data-period="1D">Daily</button>
           </div>
         </header>
         <div class="movers-grid">

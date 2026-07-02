@@ -105,6 +105,7 @@
   function periodSeries(stock, period) {
     const prices = stock.prices;
     if (period === "YTD") return prices;
+    if (period === "1D") return prices.slice(-2);
 
     const asOf = new Date(`${data.asOf}T12:00:00`);
     const monthStart = new Date(asOf.getFullYear(), asOf.getMonth(), 1);
@@ -384,11 +385,12 @@
     els.summary.innerHTML = `
       <div class="comparison-head">
         <span>Ticker</span><span>Index</span><span>Name</span><span>Last</span>
-        <span>YTD Chg %</span><span>MTD Chg %</span>
+        <span>1D Chg %</span><span>YTD Chg %</span><span>MTD Chg %</span>
       </div>
       ${state.selected
         .map((ticker, index) => {
           const stock = stockMap.get(ticker);
+          const daily = performance(stock, "1D");
           const ytd = performance(stock, "YTD");
           const mtd = performance(stock, "MTD");
           return `
@@ -399,6 +401,7 @@
               <span class="membership">${membershipHtml(stock)}</span>
               <span class="comparison-name">${escapeHtml(stock.name)}</span>
               <span>${formatPrice(ytd.current)}</span>
+              <span class="${daily.percent >= 0 ? "positive" : "negative"}">${formatPercent(daily.percent)}</span>
               <span class="${ytd.percent >= 0 ? "positive" : "negative"}">${formatPercent(ytd.percent)}</span>
               <span class="${mtd.percent >= 0 ? "positive" : "negative"}">${formatPercent(mtd.percent)}</span>
             </div>`;
@@ -462,10 +465,15 @@
     const tooltip = document.querySelector("#tooltipMain");
     const metric = state.chartMetric;
     const selectedStocks = state.selected.map((ticker) => stockMap.get(ticker));
-    const isYtd = period === "YTD";
-    document.querySelector("#chartKicker").textContent = isYtd ? "From Dec 31 close" : "From prior month close";
-    document.querySelector("#chartTitle").textContent = isYtd ? "Year to date" : "Month to date";
-    svg.setAttribute("aria-label", `${isYtd ? "Year-to-date" : "Month-to-date"} price chart`);
+    const periodLabels = {
+      YTD: ["From Dec 31 close", "Year to date", "Year-to-date"],
+      MTD: ["From prior month close", "Month to date", "Month-to-date"],
+      "1D": ["From prior close", "Daily change", "Daily"],
+    };
+    const [kicker, title, ariaPeriod] = periodLabels[period] || periodLabels.YTD;
+    document.querySelector("#chartKicker").textContent = kicker;
+    document.querySelector("#chartTitle").textContent = title;
+    svg.setAttribute("aria-label", `${ariaPeriod} price chart`);
     svg.replaceChildren();
 
     if (!selectedStocks.length) {
@@ -731,6 +739,7 @@
       .map((ticker) => stockMap.get(ticker))
       .filter(Boolean)
       .map((stock) => {
+        const daily = performance(stock, "1D");
         const ytd = performance(stock, "YTD");
         const mtd = performance(stock, "MTD");
         return {
@@ -740,6 +749,7 @@
           Sector: stock.sector,
           "GICS Sub-Industry": subIndustryFor(stock),
           "Last Price": ytd.current,
+          "1D Change %": daily.percent / 100,
           "YTD Change %": ytd.percent / 100,
           "MTD Change %": mtd.percent / 100,
         };
