@@ -277,6 +277,30 @@
     return true;
   }
 
+  function splitAdjustedPreviousClose(previousClose, latestPrice) {
+    if (!Number.isFinite(previousClose) || !Number.isFinite(latestPrice) || previousClose <= 0 || latestPrice <= 0) {
+      return previousClose;
+    }
+    const currentMove = Math.abs(latestPrice / previousClose - 1);
+    if (currentMove <= 0.5) return previousClose;
+
+    const splitRatios = [2, 3, 4, 5, 10, 20];
+    let best = previousClose;
+    let bestMove = currentMove;
+
+    splitRatios.forEach((ratio) => {
+      [previousClose / ratio, previousClose * ratio].forEach((candidate) => {
+        const candidateMove = Math.abs(latestPrice / candidate - 1);
+        if (candidateMove < bestMove && candidateMove <= 0.35) {
+          best = candidate;
+          bestMove = candidateMove;
+        }
+      });
+    });
+
+    return best;
+  }
+
   function applyLiveQuotes(payload) {
     let updated = 0;
     let latestDate = data.asOf;
@@ -284,7 +308,8 @@
       const stock = stockMap.get(ticker);
       if (!stock) return;
       if (quote.previousDate && Number.isFinite(quote.previousClose)) {
-        mergePricePoint(stock, quote.previousDate, quote.previousClose);
+        const adjustedPreviousClose = splitAdjustedPreviousClose(quote.previousClose, quote.price);
+        mergePricePoint(stock, quote.previousDate, adjustedPreviousClose);
       }
       if (mergePricePoint(stock, quote.marketDate, quote.price)) {
         updated += 1;

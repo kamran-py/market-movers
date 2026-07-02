@@ -82,6 +82,39 @@ def bar_value(snapshot: dict, key: str) -> tuple[float | None, str | None]:
     return (float(price), timestamp) if price is not None else (None, timestamp)
 
 
+def split_adjusted_previous_close(
+    previous_close: float | None, latest_price: float | None
+) -> tuple[float | None, bool, float | None]:
+    if (
+        previous_close is None
+        or latest_price is None
+        or previous_close <= 0
+        or latest_price <= 0
+    ):
+        return previous_close, False, None
+
+    current_move = abs(latest_price / previous_close - 1)
+    if current_move <= 0.5:
+        return previous_close, False, None
+
+    best_price = previous_close
+    best_move = current_move
+    best_ratio: float | None = None
+
+    for ratio in (2, 3, 4, 5, 10, 20):
+        for candidate, label in (
+            (previous_close / ratio, float(ratio)),
+            (previous_close * ratio, 1 / float(ratio)),
+        ):
+            candidate_move = abs(latest_price / candidate - 1)
+            if candidate_move < best_move and candidate_move <= 0.35:
+                best_price = candidate
+                best_move = candidate_move
+                best_ratio = label
+
+    return best_price, best_ratio is not None, best_ratio
+
+
 def normalize_snapshot(symbol: str, snapshot: dict) -> dict | None:
     trade = snapshot.get("latestTrade") or {}
     price = trade.get("p")
@@ -106,6 +139,9 @@ def normalize_snapshot(symbol: str, snapshot: dict) -> dict | None:
         if previous_parsed
         else None
     )
+    adjusted_previous_close, previous_was_adjusted, adjustment_ratio = (
+        split_adjusted_previous_close(previous_close, float(price))
+    )
 
     return {
         "symbol": symbol,
@@ -116,8 +152,12 @@ def normalize_snapshot(symbol: str, snapshot: dict) -> dict | None:
             round(regular_close, 4) if regular_close is not None else None
         ),
         "previousClose": (
-            round(previous_close, 4) if previous_close is not None else None
+            round(adjusted_previous_close, 4)
+            if adjusted_previous_close is not None
+            else None
         ),
+        "previousCloseAdjusted": previous_was_adjusted,
+        "previousCloseAdjustmentRatio": adjustment_ratio,
         "previousDate": previous_date,
     }
 

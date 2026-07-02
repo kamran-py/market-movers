@@ -45,6 +45,47 @@ const barValue = (snapshot, key) => {
   };
 };
 
+const splitAdjustedPreviousClose = (previousClose, latestPrice) => {
+  if (
+    !Number.isFinite(previousClose) ||
+    !Number.isFinite(latestPrice) ||
+    previousClose <= 0 ||
+    latestPrice <= 0
+  ) {
+    return { price: previousClose, adjusted: false, ratio: null };
+  }
+
+  const currentMove = Math.abs(latestPrice / previousClose - 1);
+  if (currentMove <= 0.5) {
+    return { price: previousClose, adjusted: false, ratio: null };
+  }
+
+  const splitRatios = [2, 3, 4, 5, 10, 20];
+  let bestPrice = previousClose;
+  let bestMove = currentMove;
+  let bestRatio = null;
+
+  for (const ratio of splitRatios) {
+    for (const [candidate, label] of [
+      [previousClose / ratio, ratio],
+      [previousClose * ratio, 1 / ratio],
+    ]) {
+      const candidateMove = Math.abs(latestPrice / candidate - 1);
+      if (candidateMove < bestMove && candidateMove <= 0.35) {
+        bestPrice = candidate;
+        bestMove = candidateMove;
+        bestRatio = label;
+      }
+    }
+  }
+
+  return {
+    price: bestPrice,
+    adjusted: bestRatio !== null,
+    ratio: bestRatio,
+  };
+};
+
 const normalizeSnapshot = (symbol, snapshot) => {
   const minute = barValue(snapshot, "minuteBar");
   const daily = barValue(snapshot, "dailyBar");
@@ -56,6 +97,7 @@ const normalizeSnapshot = (symbol, snapshot) => {
   const timestamp = trade.t || minute.timestamp || daily.timestamp;
 
   if (!Number.isFinite(price)) return null;
+  const adjustedPrevious = splitAdjustedPreviousClose(previous.price, price);
 
   return {
     symbol,
@@ -65,9 +107,11 @@ const normalizeSnapshot = (symbol, snapshot) => {
     regularClose: Number.isFinite(daily.price)
       ? Number(daily.price.toFixed(4))
       : null,
-    previousClose: Number.isFinite(previous.price)
-      ? Number(previous.price.toFixed(4))
+    previousClose: Number.isFinite(adjustedPrevious.price)
+      ? Number(adjustedPrevious.price.toFixed(4))
       : null,
+    previousCloseAdjusted: adjustedPrevious.adjusted,
+    previousCloseAdjustmentRatio: adjustedPrevious.ratio,
     previousDate: timestampDate(previous.timestamp),
   };
 };
