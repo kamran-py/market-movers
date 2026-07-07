@@ -425,6 +425,19 @@ body {
   font-weight: 700;
 }
 
+.panel-title {
+  fill: #2e3542;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.panel-subnote {
+  fill: #7a8494;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10px;
+}
+
 .label-leader {
   stroke: var(--series-color);
   stroke-width: 1;
