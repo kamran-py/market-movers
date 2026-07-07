@@ -467,7 +467,39 @@
       ticks.push(Math.abs(value) < step / 1000 ? 0 : value);
     }
 
-    return { min: scaleMin, max: scaleMax, step, ticks };
+    return { min: scaleMin, max: scaleMax, step, ticks, transform: (value) => value, scaled: false };
+  }
+
+  function logReturnPercent(value) {
+    return Math.log(Math.max(0.05, 1 + value / 100)) * 100;
+  }
+
+  function percentScale(min, max) {
+    const negativeRange = Math.abs(Math.min(min, 0));
+    const positiveRange = Math.max(max, 0);
+    const shouldCompress =
+      positiveRange > 250 ||
+      negativeRange > 80 ||
+      (positiveRange > 100 && negativeRange > 25 && positiveRange / negativeRange > 4);
+
+    if (!shouldCompress) return nicePercentScale(min, max);
+
+    const observedRange = Math.max(max - min, 1);
+    const rawMin = Math.max(-95, Math.min(0, min - Math.max(10, observedRange * 0.06)));
+    const rawMax = Math.max(0, max + Math.max(10, observedRange * 0.06));
+    const candidates = [-95, -90, -75, -50, -25, 0, 25, 50, 100, 200, 400, 600, 800, 1000, 1500, 2000, 3000, 5000];
+    const ticks = candidates.filter((value) => value >= rawMin && value <= rawMax);
+    if (!ticks.includes(0)) ticks.push(0);
+    ticks.sort((left, right) => left - right);
+
+    return {
+      min: rawMin,
+      max: rawMax,
+      step: 1,
+      ticks,
+      transform: logReturnPercent,
+      scaled: true,
+    };
   }
 
   function monthStartTicks(minTime, maxTime) {
@@ -496,7 +528,8 @@
       "1D": ["From prior close", "Daily change", "Daily"],
     };
     const [kicker, title, ariaPeriod] = periodLabels[period] || periodLabels.YTD;
-    document.querySelector("#chartKicker").textContent = kicker;
+    const chartKicker = document.querySelector("#chartKicker");
+    chartKicker.textContent = kicker;
     document.querySelector("#chartTitle").textContent = title;
     svg.setAttribute("aria-label", `${ariaPeriod} price chart`);
     svg.replaceChildren();
@@ -538,16 +571,18 @@
     const maxTime = Math.max(...allPoints.map((point) => point.time));
     const observedMin = Math.min(...allPoints.map((point) => point.value));
     const observedMax = Math.max(...allPoints.map((point) => point.value));
-    const percentScale =
-      metric === "percent" ? nicePercentScale(observedMin, observedMax) : null;
-    const [minValue, maxValue] = percentScale
-      ? [percentScale.min, percentScale.max]
+    const percentAxis =
+      metric === "percent" ? percentScale(observedMin, observedMax) : null;
+    if (percentAxis?.scaled) chartKicker.textContent = `${kicker} · scaled % axis`;
+    const scaleValue = percentAxis?.transform || ((value) => value);
+    const [minValue, maxValue] = percentAxis
+      ? [scaleValue(percentAxis.min), scaleValue(percentAxis.max)]
       : niceExtent(observedMin, observedMax, metric);
     const x = (time) => margin.left + ((time - minTime) / (maxTime - minTime || 1)) * plotWidth;
-    const y = (value) => margin.top + (1 - (value - minValue) / (maxValue - minValue || 1)) * plotHeight;
+    const y = (value) => margin.top + (1 - (scaleValue(value) - minValue) / (maxValue - minValue || 1)) * plotHeight;
 
-    const axisTicks = percentScale
-      ? percentScale.ticks
+    const axisTicks = percentAxis
+      ? percentAxis.ticks
       : Array.from(
           { length: 5 },
           (_, index) => minValue + ((maxValue - minValue) * index) / 4,
@@ -567,7 +602,7 @@
         "text-anchor": "end",
         class: "axis-label",
       });
-      const percentDecimals = percentScale && percentScale.step < 1 ? 1 : 0;
+      const percentDecimals = percentAxis && !percentAxis.scaled && percentAxis.step < 1 ? 1 : 0;
       label.textContent =
         metric === "percent"
           ? `${value.toFixed(percentDecimals)}%`
