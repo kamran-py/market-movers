@@ -40,7 +40,6 @@
     selected: initial.filter((ticker) => stockMap.has(ticker)).slice(0, 8),
     sector: "all",
     subIndustry: "all",
-    chartView: "panels",
     chartPeriod: "YTD",
     chartMetric: "percent",
     moversPeriod: "YTD",
@@ -502,69 +501,6 @@
     return ticks.length ? ticks : [minTime, maxTime].filter((time, index, list) => index === 0 || time !== list[0]);
   }
 
-  const metricLabel = (metric, value) => {
-    if (metric === "price") return formatPrice(value);
-    if (metric === "wealth") return `$${value.toFixed(0)}`;
-    return formatPercent(value);
-  };
-
-  function chartSeries(stock, period, metric, index) {
-    const raw = periodSeries(stock, period);
-    const base = raw[0][1];
-    let peakWealth = 100;
-    const points = raw.map(([date, price]) => {
-      const percent = ((price / base) - 1) * 100;
-      const wealth = price / base * 100;
-      peakWealth = Math.max(peakWealth, wealth);
-      const drawdown = (wealth / peakWealth - 1) * 100;
-      const values = { percent, wealth, drawdown, price };
-      return {
-        date,
-        time: new Date(`${date}T12:00:00`).getTime(),
-        raw: price,
-        percent,
-        wealth,
-        drawdown,
-        value: values[metric],
-      };
-    });
-    return {
-      stock,
-      color: colors[index],
-      points,
-      finalPercent: points.at(-1)?.percent ?? 0,
-    };
-  }
-
-  function groupedSeries(series) {
-    const groups = [
-      { key: "large", title: "Large gainers", subtitle: "Own scale · 0% baseline", items: [] },
-      { key: "moderate", title: "Moderate movers", subtitle: "Own scale · 0% baseline", items: [] },
-      { key: "decliners", title: "Decliners", subtitle: "Own scale · 0% baseline", items: [] },
-    ];
-    series.forEach((item) => {
-      if (item.finalPercent >= 100) groups[0].items.push(item);
-      else if (item.finalPercent <= -20) groups[2].items.push(item);
-      else groups[1].items.push(item);
-    });
-    return groups.filter((group) => group.items.length);
-  }
-
-  function axisFor(values, metric) {
-    if (metric === "percent" || metric === "drawdown") {
-      return nicePercentScale(Math.min(...values, 0), Math.max(...values, 0));
-    }
-    const baseline = metric === "wealth" ? 100 : null;
-    const min = Math.min(...values, baseline ?? values[0]);
-    const max = Math.max(...values, baseline ?? values[0]);
-    const [scaleMin, scaleMax] = niceExtent(min, max, metric);
-    return {
-      min: scaleMin,
-      max: scaleMax,
-      ticks: Array.from({ length: 4 }, (_, index) => scaleMin + ((scaleMax - scaleMin) * index) / 3),
-    };
-  }
-
   function renderChart() {
     const period = state.chartPeriod;
     const svg = document.querySelector("#chartMain");
@@ -577,137 +513,88 @@
       MTD: ["From prior month close", "Month to date", "Month-to-date"],
       "1D": ["From prior close", "Daily change", "Daily"],
     };
-    const metricNames = {
-      percent: "% change",
-      wealth: "$100 wealth index",
-      drawdown: "drawdown",
-      price: "price",
-    };
     const [kicker, title, ariaPeriod] = periodLabels[period] || periodLabels.YTD;
     const chartKicker = document.querySelector("#chartKicker");
-    chartKicker.textContent =
-      `${kicker} · ${state.chartView === "panels" ? "grouped panels" : "combined scale"} · ${metricNames[metric]}`;
+    chartKicker.textContent = kicker;
     document.querySelector("#chartTitle").textContent = title;
-    svg.setAttribute("aria-label", `${ariaPeriod} ${metricNames[metric]} chart`);
+    svg.setAttribute("aria-label", `${ariaPeriod} price chart`);
     svg.replaceChildren();
-    if (legend) legend.innerHTML = "";
 
     if (!selectedStocks.length) {
-      svg.style.height = "";
       svg.setAttribute("viewBox", "0 0 1200 360");
-      const text = svgNode("text", { x: 600, y: 180, "text-anchor": "middle", class: "axis-label" });
+      const text = svgNode("text", {
+        x: 600,
+        y: 180,
+        "text-anchor": "middle",
+        class: "axis-label",
+      });
       text.textContent = "Search for a stock to begin";
       svg.append(text);
+      if (legend) legend.innerHTML = "";
       return;
     }
 
-    const series = selectedStocks.map((stock, index) => chartSeries(stock, period, metric, index));
-    const allPoints = series.flatMap((item) => item.points);
-    const minTime = Math.min(...allPoints.map((point) => point.time));
-    const maxTime = Math.max(...allPoints.map((point) => point.time));
-    const groups = state.chartView === "panels" ? groupedSeries(series) : [{ title: "Combined scale", subtitle: "", items: series }];
     const width = 1200;
-    const panelHeight = state.chartView === "panels" ? 166 : 360;
-    const height = groups.length * panelHeight + 30;
-    const margin = { top: 24, right: 168, bottom: 30, left: 56 };
+    const height = 360;
+    const margin = { top: 20, right: 150, bottom: 34, left: 52 };
     const plotWidth = width - margin.left - margin.right;
-    svg.style.height = `${Math.max(390, height)}px`;
+    const plotHeight = height - margin.top - margin.bottom;
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
-    const x = (time) => margin.left + ((time - minTime) / (maxTime - minTime || 1)) * plotWidth;
-    const dateTicks = monthStartTicks(minTime, maxTime);
-    const hoverLines = [];
-
-    groups.forEach((group, groupIndex) => {
-      const top = margin.top + groupIndex * panelHeight;
-      const bottom = top + panelHeight - (groupIndex === groups.length - 1 ? margin.bottom : 12);
-      const plotHeight = bottom - top;
-      const values = group.items.flatMap((item) => item.points.map((point) => point.value));
-      const axis = axisFor(values, metric);
-      const y = (value) => top + (1 - (value - axis.min) / (axis.max - axis.min || 1)) * plotHeight;
-
-      const titleText = svgNode("text", { x: margin.left, y: top - 8, class: "panel-title" });
-      titleText.textContent = group.title;
-      const subtitleText = svgNode("text", { x: margin.left + 96, y: top - 8, class: "panel-subnote" });
-      subtitleText.textContent = state.chartView === "panels" ? group.subtitle : "";
-      svg.append(titleText, subtitleText);
-
-      axis.ticks.forEach((value) => {
-        const yPos = y(value);
-        const isBaseline =
-          (metric === "wealth" && Math.abs(value - 100) < 0.0001) ||
-          ((metric === "percent" || metric === "drawdown") && Math.abs(value) < 0.0001);
-        const line = svgNode("line", {
-          x1: margin.left,
-          y1: yPos,
-          x2: width - margin.right,
-          y2: yPos,
-          class: `grid-line ${isBaseline ? "zero-line" : ""}`,
-        });
-        const label = svgNode("text", {
-          x: margin.left - 8,
-          y: yPos + 3,
-          "text-anchor": "end",
-          class: "axis-label",
-        });
-        label.textContent = metricLabel(metric, value).replace("+", "");
-        svg.append(line, label);
-      });
-
-      if (metric === "wealth" && axis.min < 100 && axis.max > 100 && !axis.ticks.some((tick) => Math.abs(tick - 100) < 0.001)) {
-        const yPos = y(100);
-        svg.append(svgNode("line", { x1: margin.left, y1: yPos, x2: width - margin.right, y2: yPos, class: "grid-line zero-line" }));
-      }
-
-      if ((metric === "percent" || metric === "drawdown") && axis.min < 0 && axis.max > 0 && !axis.ticks.includes(0)) {
-        const yPos = y(0);
-        svg.append(svgNode("line", { x1: margin.left, y1: yPos, x2: width - margin.right, y2: yPos, class: "grid-line zero-line" }));
-      }
-
-      const endLabels = [];
-      group.items.forEach((item) => {
-        const pathData = item.points
-          .map((point, pointIndex) => `${pointIndex ? "L" : "M"}${x(point.time).toFixed(2)},${y(point.value).toFixed(2)}`)
-          .join(" ");
-        const path = svgNode("path", { d: pathData, class: "series-path", style: `--series-color:${item.color}` });
-        const end = item.points.at(-1);
-        const dot = svgNode("circle", { cx: x(end.time), cy: y(end.value), r: 3.8, class: "series-end", style: `--series-color:${item.color}` });
-        endLabels.push({
-          ticker: item.stock.ticker,
-          value: end.value,
-          color: item.color,
-          x: x(end.time),
-          targetY: y(end.value),
-        });
-        svg.append(path, dot);
-      });
-
-      resolveLabelSlots(endLabels, top + 8, bottom - 8).forEach((label) => {
-        if (Math.abs(label.y - label.targetY) > 2) {
-          svg.append(svgNode("line", {
-            x1: label.x + 5,
-            y1: label.targetY,
-            x2: width - margin.right + 8,
-            y2: label.y,
-            class: "label-leader",
-            style: `--series-color:${label.color}`,
-          }));
-        }
-        const endLabel = svgNode("text", {
-          x: width - margin.right + 12,
-          y: label.y + 4,
-          class: "series-end-label",
-          style: `--series-color:${label.color}`,
-        });
-        endLabel.textContent = `${label.ticker} ${metricLabel(metric, label.value)}`;
-        svg.append(endLabel);
-      });
-
-      const hoverLine = svgNode("line", { y1: top, y2: bottom, class: "hover-line" });
-      hoverLines.push(hoverLine);
-      svg.append(hoverLine);
+    const series = selectedStocks.map((stock) => {
+      const raw = periodSeries(stock, period);
+      const base = raw[0][1];
+      return raw.map(([date, price]) => ({
+        date,
+        time: new Date(`${date}T12:00:00`).getTime(),
+        raw: price,
+        value: metric === "percent" ? ((price / base) - 1) * 100 : price,
+      }));
     });
 
+    const allPoints = series.flat();
+    const minTime = Math.min(...allPoints.map((point) => point.time));
+    const maxTime = Math.max(...allPoints.map((point) => point.time));
+    const observedMin = Math.min(...allPoints.map((point) => point.value));
+    const observedMax = Math.max(...allPoints.map((point) => point.value));
+    const percentAxis =
+      metric === "percent" ? nicePercentScale(observedMin, observedMax) : null;
+    const [minValue, maxValue] = percentAxis
+      ? [percentAxis.min, percentAxis.max]
+      : niceExtent(observedMin, observedMax, metric);
+    const x = (time) => margin.left + ((time - minTime) / (maxTime - minTime || 1)) * plotWidth;
+    const y = (value) => margin.top + (1 - (value - minValue) / (maxValue - minValue || 1)) * plotHeight;
+
+    const axisTicks = percentAxis
+      ? percentAxis.ticks
+      : Array.from(
+          { length: 5 },
+          (_, index) => minValue + ((maxValue - minValue) * index) / 4,
+        );
+    for (const value of axisTicks) {
+      const yPos = y(value);
+      const line = svgNode("line", {
+        x1: margin.left,
+        y1: yPos,
+        x2: width - margin.right,
+        y2: yPos,
+        class: `grid-line ${metric === "percent" && value === 0 ? "zero-line" : ""}`,
+      });
+      const label = svgNode("text", {
+        x: margin.left - 8,
+        y: yPos + 3,
+        "text-anchor": "end",
+        class: "axis-label",
+      });
+      const percentDecimals = percentAxis && percentAxis.step < 1 ? 1 : 0;
+      label.textContent =
+        metric === "percent"
+          ? `${Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(percentDecimals)}%`
+          : `$${value.toFixed(0)}`;
+      svg.append(line, label);
+    }
+
+    const dateTicks = monthStartTicks(minTime, maxTime);
     dateTicks.forEach((time) => {
       const xPos = x(time);
       const label = svgNode("text", {
@@ -716,20 +603,85 @@
         "text-anchor": "middle",
         class: "axis-label",
       });
-      label.textContent = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(time));
+      label.textContent = new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+      }).format(new Date(time));
       svg.append(label);
     });
 
+    const endLabels = [];
+    series.forEach((points, index) => {
+      const pathData = points
+        .map((point, pointIndex) => `${pointIndex ? "L" : "M"}${x(point.time).toFixed(2)},${y(point.value).toFixed(2)}`)
+        .join(" ");
+      const path = svgNode("path", {
+        d: pathData,
+        class: "series-path",
+        style: `--series-color:${colors[index]}`,
+      });
+      const end = points[points.length - 1];
+      const dot = svgNode("circle", {
+        cx: x(end.time),
+        cy: y(end.value),
+        r: 4,
+        class: "series-end",
+        style: `--series-color:${colors[index]}`,
+      });
+      endLabels.push({
+        ticker: selectedStocks[index].ticker,
+        value: end.value,
+        color: colors[index],
+        x: x(end.time),
+        targetY: y(end.value),
+      });
+      svg.append(path, dot);
+    });
+
+    resolveLabelSlots(endLabels, margin.top + 8, height - margin.bottom - 8).forEach((label) => {
+      if (Math.abs(label.y - label.targetY) > 2) {
+        svg.append(
+          svgNode("line", {
+            x1: label.x + 5,
+            y1: label.targetY,
+            x2: width - margin.right + 8,
+            y2: label.y,
+            class: "label-leader",
+            style: `--series-color:${label.color}`,
+          }),
+        );
+      }
+      const endLabel = svgNode("text", {
+        x: width - margin.right + 12,
+        y: label.y + 4,
+        class: "series-end-label",
+        style: `--series-color:${label.color}`,
+      });
+      endLabel.textContent =
+        metric === "percent"
+          ? `${label.ticker} ${formatPercent(label.value)}`
+          : `${label.ticker} ${formatPrice(label.value)}`;
+      svg.append(endLabel);
+    });
+
+    const hoverLine = svgNode("line", {
+      y1: margin.top,
+      y2: height - margin.bottom,
+      class: "hover-line",
+    });
     const hitbox = svgNode("rect", {
       x: margin.left,
-      y: margin.top - 16,
+      y: margin.top,
       width: plotWidth,
-      height: height - margin.top,
+      height: plotHeight,
       class: "chart-hitbox",
     });
-    svg.append(hitbox);
+    svg.append(hoverLine, hitbox);
 
-    const timeline = [...new Set(allPoints.map((point) => point.time))].sort((left, right) => left - right);
+    const timeline = [...new Set(allPoints.map((point) => point.time))].sort(
+      (left, right) => left - right,
+    );
+
     hitbox.addEventListener("pointermove", (event) => {
       const point = svg.createSVGPoint();
       point.x = event.clientX;
@@ -737,23 +689,22 @@
       const matrix = svg.getScreenCTM();
       const svgPoint = matrix ? point.matrixTransform(matrix.inverse()) : point;
       const plotX = Math.max(margin.left, Math.min(width - margin.right, svgPoint.x));
-      const targetTime = minTime + ((plotX - margin.left) / plotWidth) * (maxTime - minTime);
+      const targetTime =
+        minTime + ((plotX - margin.left) / plotWidth) * (maxTime - minTime);
       const anchorTime = timeline.reduce((best, time) =>
         Math.abs(time - targetTime) < Math.abs(best - targetTime) ? time : best,
       );
-      const rows = series.map((item) => {
-        const nearest = item.points.reduce((best, point) =>
+      const rows = series.map((points, index) => {
+        const nearest = points.reduce((best, point) =>
           Math.abs(point.time - anchorTime) < Math.abs(best.time - anchorTime) ? point : best,
         );
-        return { stock: item.stock, point: nearest, color: item.color };
+        return { stock: selectedStocks[index], point: nearest, color: colors[index] };
       });
       const anchorDate = new Date(anchorTime).toISOString().slice(0, 10);
       const hoverX = x(anchorTime);
-      hoverLines.forEach((line) => {
-        line.setAttribute("x1", hoverX);
-        line.setAttribute("x2", hoverX);
-        line.style.opacity = "0.65";
-      });
+      hoverLine.setAttribute("x1", hoverX);
+      hoverLine.setAttribute("x2", hoverX);
+      hoverLine.style.opacity = "0.65";
       tooltip.hidden = false;
       tooltip.innerHTML = `
         <span class="tip-date">${displayDate(anchorDate, { year: true })}</span>
@@ -762,7 +713,7 @@
             ({ stock, point, color }) => `
               <span class="tip-row" style="--series-color:${color}">
                 <span>${stock.ticker}</span>
-                <strong>${metric === "percent" ? formatPercent(point.percent) : `${metricLabel(metric, point.value)} · ${formatPercent(point.percent)}`}</strong>
+                <strong>${metric === "percent" ? formatPercent(point.value) : formatPrice(point.raw)}</strong>
               </span>`,
           )
           .join("")}`;
@@ -774,11 +725,11 @@
     });
 
     hitbox.addEventListener("pointerleave", () => {
-      hoverLines.forEach((line) => {
-        line.style.opacity = "0";
-      });
+      hoverLine.style.opacity = "0";
       tooltip.hidden = true;
     });
+
+    if (legend) legend.innerHTML = "";
   }
 
   function renderMovers() {
@@ -1146,15 +1097,6 @@
     updateUniverseLabels();
     renderMovers();
     if (!els.results.hidden) renderSearch();
-  });
-
-  document.querySelectorAll(".chart-view-toggle button").forEach((button) => {
-    button.addEventListener("click", () => {
-      document.querySelectorAll(".chart-view-toggle button").forEach((item) => item.classList.remove("active"));
-      button.classList.add("active");
-      state.chartView = button.dataset.view;
-      renderChart();
-    });
   });
 
   document.querySelectorAll(".chart-period-toggle button").forEach((button) => {
