@@ -625,7 +625,7 @@ h1 em {
 .chart-stage {
   position: relative;
   min-height: 410px;
-  border-top: 1px solid var(--line);
+  border-top: 0;
 }
 
 .price-chart {
@@ -636,13 +636,13 @@ h1 em {
 }
 
 .grid-line {
-  stroke: #e4e6df;
+  stroke: #e7e1d7;
   stroke-width: 1;
 }
 
 .zero-line {
-  stroke: #9ca5ae;
-  stroke-dasharray: 4 4;
+  stroke: #6f7782;
+  stroke-dasharray: none;
 }
 
 .axis-label {
@@ -656,7 +656,7 @@ h1 em {
   stroke: var(--series-color);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2.2;
+  stroke-width: 1.8;
   vector-effect: non-scaling-stroke;
 }
 
@@ -667,8 +667,8 @@ h1 em {
 }
 
 .hover-line {
-  stroke: var(--ink);
-  stroke-dasharray: 3 4;
+  stroke: #596273;
+  stroke-dasharray: 2 3;
   opacity: 0;
 }
 
@@ -716,12 +716,7 @@ h1 em {
 }
 
 .chart-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  min-height: 24px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+  display: none;
 }
 
 .legend-item {

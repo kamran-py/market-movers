@@ -9,14 +9,14 @@
   const snapshotAsOf = data.asOf;
 
   const colors = [
-    "#6256d9",
-    "#e95f3d",
-    "#16865c",
-    "#d23d8f",
-    "#3c82d0",
-    "#a27322",
-    "#7956a8",
-    "#2e9cab",
+    "#0072B2",
+    "#D55E00",
+    "#009E73",
+    "#CC79A7",
+    "#E69F00",
+    "#56B4E9",
+    "#6F4E7C",
+    "#7F7F7F",
   ];
   const sectorOrder = [
     "Energy",
@@ -467,39 +467,25 @@
       ticks.push(Math.abs(value) < step / 1000 ? 0 : value);
     }
 
-    return { min: scaleMin, max: scaleMax, step, ticks, transform: (value) => value, scaled: false };
+    return { min: scaleMin, max: scaleMax, step, ticks };
   }
 
-  function logReturnPercent(value) {
-    return Math.log(Math.max(0.05, 1 + value / 100)) * 100;
-  }
+  function resolveLabelSlots(labels, top, bottom, minGap = 18) {
+    const sorted = [...labels].sort((left, right) => left.targetY - right.targetY);
+    sorted.forEach((label, index) => {
+      label.y = Math.max(top, Math.min(bottom, label.targetY));
+      if (index > 0) label.y = Math.max(label.y, sorted[index - 1].y + minGap);
+    });
 
-  function percentScale(min, max) {
-    const negativeRange = Math.abs(Math.min(min, 0));
-    const positiveRange = Math.max(max, 0);
-    const shouldCompress =
-      positiveRange > 250 ||
-      negativeRange > 80 ||
-      (positiveRange > 100 && negativeRange > 25 && positiveRange / negativeRange > 4);
+    for (let index = sorted.length - 2; index >= 0; index -= 1) {
+      sorted[index].y = Math.min(sorted[index].y, sorted[index + 1].y - minGap);
+    }
 
-    if (!shouldCompress) return nicePercentScale(min, max);
+    sorted.forEach((label) => {
+      label.y = Math.max(top, Math.min(bottom, label.y));
+    });
 
-    const observedRange = Math.max(max - min, 1);
-    const rawMin = Math.max(-95, Math.min(0, min - Math.max(10, observedRange * 0.06)));
-    const rawMax = Math.max(0, max + Math.max(10, observedRange * 0.06));
-    const candidates = [-95, -90, -75, -50, -25, 0, 25, 50, 100, 200, 400, 600, 800, 1000, 1500, 2000, 3000, 5000];
-    const ticks = candidates.filter((value) => value >= rawMin && value <= rawMax);
-    if (!ticks.includes(0)) ticks.push(0);
-    ticks.sort((left, right) => left - right);
-
-    return {
-      min: rawMin,
-      max: rawMax,
-      step: 1,
-      ticks,
-      transform: logReturnPercent,
-      scaled: true,
-    };
+    return sorted;
   }
 
   function monthStartTicks(minTime, maxTime) {
@@ -544,13 +530,13 @@
       });
       text.textContent = "Search for a stock to begin";
       svg.append(text);
-      legend.innerHTML = "";
+      if (legend) legend.innerHTML = "";
       return;
     }
 
     const width = 1200;
     const height = 360;
-    const margin = { top: 18, right: 86, bottom: 32, left: 58 };
+    const margin = { top: 20, right: 150, bottom: 34, left: 52 };
     const plotWidth = width - margin.left - margin.right;
     const plotHeight = height - margin.top - margin.bottom;
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -572,14 +558,12 @@
     const observedMin = Math.min(...allPoints.map((point) => point.value));
     const observedMax = Math.max(...allPoints.map((point) => point.value));
     const percentAxis =
-      metric === "percent" ? percentScale(observedMin, observedMax) : null;
-    if (percentAxis?.scaled) chartKicker.textContent = `${kicker} · scaled % axis`;
-    const scaleValue = percentAxis?.transform || ((value) => value);
+      metric === "percent" ? nicePercentScale(observedMin, observedMax) : null;
     const [minValue, maxValue] = percentAxis
-      ? [scaleValue(percentAxis.min), scaleValue(percentAxis.max)]
+      ? [percentAxis.min, percentAxis.max]
       : niceExtent(observedMin, observedMax, metric);
     const x = (time) => margin.left + ((time - minTime) / (maxTime - minTime || 1)) * plotWidth;
-    const y = (value) => margin.top + (1 - (scaleValue(value) - minValue) / (maxValue - minValue || 1)) * plotHeight;
+    const y = (value) => margin.top + (1 - (value - minValue) / (maxValue - minValue || 1)) * plotHeight;
 
     const axisTicks = percentAxis
       ? percentAxis.ticks
@@ -602,10 +586,10 @@
         "text-anchor": "end",
         class: "axis-label",
       });
-      const percentDecimals = percentAxis && !percentAxis.scaled && percentAxis.step < 1 ? 1 : 0;
+      const percentDecimals = percentAxis && percentAxis.step < 1 ? 1 : 0;
       label.textContent =
         metric === "percent"
-          ? `${value.toFixed(percentDecimals)}%`
+          ? `${Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(percentDecimals)}%`
           : `$${value.toFixed(0)}`;
       svg.append(line, label);
     }
@@ -626,6 +610,7 @@
       svg.append(label);
     });
 
+    const endLabels = [];
     series.forEach((points, index) => {
       const pathData = points
         .map((point, pointIndex) => `${pointIndex ? "L" : "M"}${x(point.time).toFixed(2)},${y(point.value).toFixed(2)}`)
@@ -643,14 +628,40 @@
         class: "series-end",
         style: `--series-color:${colors[index]}`,
       });
-      const endLabel = svgNode("text", {
-        x: x(end.time) + 9,
-        y: y(end.value) + 4,
-        class: "series-end-label",
-        style: `--series-color:${colors[index]}`,
+      endLabels.push({
+        ticker: selectedStocks[index].ticker,
+        value: end.value,
+        color: colors[index],
+        x: x(end.time),
+        targetY: y(end.value),
       });
-      endLabel.textContent = selectedStocks[index].ticker;
-      svg.append(path, dot, endLabel);
+      svg.append(path, dot);
+    });
+
+    resolveLabelSlots(endLabels, margin.top + 8, height - margin.bottom - 8).forEach((label) => {
+      if (Math.abs(label.y - label.targetY) > 2) {
+        svg.append(
+          svgNode("line", {
+            x1: label.x + 5,
+            y1: label.targetY,
+            x2: width - margin.right + 8,
+            y2: label.y,
+            class: "label-leader",
+            style: `--series-color:${label.color}`,
+          }),
+        );
+      }
+      const endLabel = svgNode("text", {
+        x: width - margin.right + 12,
+        y: label.y + 4,
+        class: "series-end-label",
+        style: `--series-color:${label.color}`,
+      });
+      endLabel.textContent =
+        metric === "percent"
+          ? `${label.ticker} ${formatPercent(label.value)}`
+          : `${label.ticker} ${formatPrice(label.value)}`;
+      svg.append(endLabel);
     });
 
     const hoverLine = svgNode("line", {
@@ -718,17 +729,7 @@
       tooltip.hidden = true;
     });
 
-    legend.innerHTML = selectedStocks
-      .map((stock, index) => {
-        const move = performance(stock, period);
-        return `
-          <button class="legend-item" data-remove="${stock.ticker}" style="--series-color:${colors[index]}">
-            <span class="color-dot"></span>
-            ${stock.ticker}
-            <span class="${move.percent >= 0 ? "positive" : "negative"}">${formatPercent(move.percent)}</span>
-          </button>`;
-      })
-      .join("");
+    if (legend) legend.innerHTML = "";
   }
 
   function renderMovers() {

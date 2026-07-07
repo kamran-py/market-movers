@@ -403,8 +403,9 @@ body {
 
 .chart-stage {
   min-height: 390px;
-  padding: 8px 12px 0;
+  padding: 6px 8px 0;
   border: 0;
+  background: #fff;
 }
 
 .price-chart {
@@ -414,6 +415,7 @@ body {
 .axis-label {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 10px;
+  fill: #687386;
 }
 
 .series-end-label {
@@ -423,11 +425,15 @@ body {
   font-weight: 700;
 }
 
+.label-leader {
+  stroke: var(--series-color);
+  stroke-width: 1;
+  opacity: 0.45;
+  vector-effect: non-scaling-stroke;
+}
+
 .chart-legend {
-  min-height: 38px;
-  padding: 9px 16px;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  display: none;
 }
 
 .legend-item {
